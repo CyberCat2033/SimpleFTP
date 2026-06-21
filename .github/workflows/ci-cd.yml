@@ -22,6 +22,8 @@ jobs:
     name: Build Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -124,37 +126,54 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  release:
-    name: Publish Release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: simple-ftp-artifacts
-          path: release-artifacts
-
       - name: Prepare release notes
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version_name }}"
+          CHANGELOG_NOTES="release-artifacts/changelog.md"
+
+          if ! awk -v version="$VERSION" '
+            $1 == "##" && $2 == "[" version "]" {
+              found = 1
+              printing = 1
+              next
+            }
+            printing && /^##[[:space:]]+\[/ {
+              exit
+            }
+            printing {
+              print
+            }
+            END {
+              if (!found) {
+                exit 44
+              }
+            }
+          ' CHANGELOG.md > "$CHANGELOG_NOTES"; then
+            echo "::error::Could not find changelog section for version $VERSION in CHANGELOG.md."
+            exit 1
+          fi
+
+          if [ ! -s "$CHANGELOG_NOTES" ]; then
+            echo "::error::Changelog section for version $VERSION in CHANGELOG.md is empty."
+            exit 1
+          fi
+
           cat > release-artifacts/release-notes.md <<EOF
           ## Simple FTP ${GITHUB_REF_NAME}
 
           Minimal FTP server for Android-based e-readers, optimized for PocketBook and eBookSender.
 
-          See CHANGELOG.md in this repository for user-facing changes.
+          ## Changelog
+
+          $(cat "$CHANGELOG_NOTES")
           EOF
 
       - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3.0.1
         with:
           name: ${{ github.ref_name }}
