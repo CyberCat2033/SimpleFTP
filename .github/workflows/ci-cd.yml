@@ -1,0 +1,168 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          VERSION_CODE="$GITHUB_RUN_NUMBER"
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="$GITHUB_REF_NAME"
+            if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Release tag must use SemVer with a leading v, for example v0.1.0."
+              exit 1
+            fi
+            VERSION_NAME="${TAG#v}"
+            ARTIFACT_SUFFIX="$TAG"
+            RELEASE_BUILD="true"
+          else
+            VERSION_NAME="0.0.0-${GITHUB_SHA::12}"
+            ARTIFACT_SUFFIX="${GITHUB_SHA::12}"
+            RELEASE_BUILD="false"
+          fi
+
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "artifact_suffix=$ARTIFACT_SUFFIX" >> "$GITHUB_OUTPUT"
+          echo "release_build=$RELEASE_BUILD" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Compile debug Kotlin
+        run: ./gradlew :app:compileDebugKotlin
+
+      - name: Prepare release signing
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$RELEASE_KEYSTORE_BASE64" || -z "$RELEASE_STORE_PASSWORD" || -z "$RELEASE_KEY_ALIAS" || -z "$RELEASE_KEY_PASSWORD" ]]; then
+            echo "::error::Release signing secrets are required for tagged release builds."
+            exit 1
+          fi
+
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+
+      - name: Build APK
+        id: build-apk
+        shell: bash
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          mkdir -p release-artifacts
+
+          if [[ "${{ steps.version.outputs.release_build }}" == "true" ]]; then
+            ./gradlew :app:assembleRelease \
+              -PVERSION_NAME="${{ steps.version.outputs.version_name }}" \
+              -PVERSION_CODE="${{ steps.version.outputs.version_code }}" \
+              -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.keystore" \
+              -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD" \
+              -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
+              -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+
+            SOURCE_APK="app/build/outputs/apk/release/app-release.apk"
+            OUTPUT_APK="simple-ftp-${{ steps.version.outputs.artifact_suffix }}.apk"
+          else
+            ./gradlew :app:assembleDebug \
+              -PVERSION_NAME="${{ steps.version.outputs.version_name }}" \
+              -PVERSION_CODE="${{ steps.version.outputs.version_code }}"
+
+            SOURCE_APK="app/build/outputs/apk/debug/app-debug.apk"
+            OUTPUT_APK="simple-ftp-${{ steps.version.outputs.artifact_suffix }}-debug.apk"
+          fi
+
+          cp "$SOURCE_APK" "release-artifacts/$OUTPUT_APK"
+          sha256sum "release-artifacts/$OUTPUT_APK" > "release-artifacts/$OUTPUT_APK.sha256"
+
+          echo "apk_name=$OUTPUT_APK" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: simple-ftp-artifacts
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: simple-ftp-artifacts
+          path: release-artifacts
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          cat > release-artifacts/release-notes.md <<EOF
+          ## Simple FTP ${GITHUB_REF_NAME}
+
+          Minimal FTP server for Android-based e-readers, optimized for PocketBook and eBookSender.
+
+          See CHANGELOG.md in this repository for user-facing changes.
+          EOF
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3.0.1
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release-artifacts/simple-ftp-${{ github.ref_name }}.apk
+            release-artifacts/simple-ftp-${{ github.ref_name }}.apk.sha256
+          body_path: release-artifacts/release-notes.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          overwrite_files: true

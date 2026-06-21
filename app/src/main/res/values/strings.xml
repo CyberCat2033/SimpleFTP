@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Simple FTP</string>
+    <string name="main_title">FTP server</string>
+    <string name="server_running">Server is running</string>
+    <string name="server_stopped">Server is stopped</string>
+    <string name="server_error">Server error: %1$s</string>
+    <string name="storage_root">Storage folder</string>
+    <string name="path">Path</string>
+    <string name="exit">Exit</string>
+    <string name="back">Back</string>
+    <string name="choose_folder">Choose folder</string>
+    <string name="use_this_folder">Use this folder</string>
+    <string name="parent_folder">Parent folder</string>
+    <string name="empty_folder">No subfolders</string>
+    <string name="file_access_missing">File access is not granted</string>
+    <string name="grant_file_access">Grant file access</string>
+    <string name="path_saved">Path is saved</string>
+    <string name="ftp_login_hint">Anonymous FTP, no password required</string>
+</resources>

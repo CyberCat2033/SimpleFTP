@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Simple FTP</string>
+    <string name="main_title">FTP-сервер</string>
+    <string name="server_running">Сервер запущен</string>
+    <string name="server_stopped">Сервер остановлен</string>
+    <string name="server_error">Ошибка сервера: %1$s</string>
+    <string name="storage_root">Папка книг</string>
+    <string name="path">Путь</string>
+    <string name="exit">Выход</string>
+    <string name="back">Назад</string>
+    <string name="choose_folder">Выбрать папку</string>
+    <string name="use_this_folder">Использовать эту папку</string>
+    <string name="parent_folder">На уровень выше</string>
+    <string name="empty_folder">Вложенных папок нет</string>
+    <string name="file_access_missing">Нет доступа к файлам</string>
+    <string name="grant_file_access">Дать доступ к файлам</string>
+    <string name="path_saved">Путь сохранён</string>
+    <string name="ftp_login_hint">Анонимный FTP, пароль не нужен</string>
+</resources>
