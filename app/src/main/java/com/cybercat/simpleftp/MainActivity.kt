@@ -59,17 +59,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.Bitmap
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.compose.runtime.produceState
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private lateinit var pathRepository: PathRepository
     private val serverStatus = MutableStateFlow(FtpServerStatus())
     private var ftpServer: MinimalFtpServer? = null
+    @Volatile
     private var currentRelativePath: String = DEFAULT_RELATIVE_PATH
     private var hasFileAccessState = mutableStateOf(false)
 
@@ -128,6 +133,8 @@ class MainActivity : ComponentActivity() {
         Environment.isExternalStorageManager()
     } else {
         ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
             PackageManager.PERMISSION_GRANTED
     }
 
@@ -243,16 +250,23 @@ private fun MainScreen(
             Spacer(Modifier.height(16.dp))
             val url = status.url
             if (url != null) {
-                val bitmap = remember(url) { QrCodeGenerator.create(url) }
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(qrSize)
-                        .border(2.dp, Color.Black),
-                    contentScale = ContentScale.FillBounds,
-                    filterQuality = FilterQuality.None
-                )
+                val bitmapState = produceState<Bitmap?>(initialValue = null, url) {
+                    value = withContext(Dispatchers.Default) {
+                        QrCodeGenerator.create(url)
+                    }
+                }
+                val bitmap = bitmapState.value
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(qrSize)
+                            .border(2.dp, Color.Black),
+                        contentScale = ContentScale.FillBounds,
+                        filterQuality = FilterQuality.None
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 Text(
                     text = url,
@@ -321,11 +335,13 @@ private fun PathScreen(
                 ?: storageRoot
         )
     }
-    val directories = remember(currentDirectory, hasFileAccess) {
-        currentDirectory.listFiles()
-            ?.filter { it.isDirectory && !it.isHidden }
-            ?.sortedBy { it.name.lowercase() }
-            .orEmpty()
+    val directories by produceState<List<File>>(initialValue = emptyList(), currentDirectory, hasFileAccess) {
+        value = withContext(Dispatchers.IO) {
+            currentDirectory.listFiles()
+                ?.filter { it.isDirectory && !it.isHidden }
+                ?.sortedBy { it.name.lowercase() }
+                .orEmpty()
+        }
     }
 
     Column(

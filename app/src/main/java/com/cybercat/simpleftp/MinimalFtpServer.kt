@@ -48,12 +48,29 @@ class MinimalFtpServer(
                     onStatus(FtpServerStatus(running = true, url = url))
                     while (running) {
                         val client = socket.accept()
+                        if (clients.size >= MAX_CLIENTS) {
+                            thread(name = "simple-ftp-reject", isDaemon = true) {
+                                runCatching {
+                                    client.use {
+                                        val writer = BufferedWriter(OutputStreamWriter(it.getOutputStream(), Charsets.UTF_8))
+                                        writer.write("421 Too many connections.\r\n")
+                                        writer.flush()
+                                    }
+                                }
+                            }
+                            continue
+                        }
                         clients += client
                         thread(name = "simple-ftp-client", isDaemon = true) {
-                            client.use {
-                                handleClient(it)
+                            try {
+                                client.use {
+                                    handleClient(it)
+                                }
+                            } catch (e: Exception) {
+                                // Ignore client connection errors safely
+                            } finally {
+                                clients -= client
                             }
-                            clients -= client
                         }
                     }
                 }
@@ -82,7 +99,7 @@ class MinimalFtpServer(
     }
 
     private fun handleClient(socket: Socket) {
-        socket.soTimeout = 0
+        socket.soTimeout = 5 * 60 * 1000 // 5 minutes read timeout
         val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
         val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
         val session = ClientSession(socket, writer)
@@ -280,7 +297,12 @@ class MinimalFtpServer(
     }
 
     private fun removeDirectory(session: ClientSession, path: String) {
+        val root = rootProvider().canonicalFile
         val directory = resolve(session.cwd, path)
+        if (directory != null && directory.canonicalPath == root.canonicalPath) {
+            session.reply(550, "Cannot remove root directory")
+            return
+        }
         if (directory?.isDirectory == true && directory.delete()) {
             session.reply(250, "Removed")
         } else {
@@ -412,6 +434,7 @@ class MinimalFtpServer(
     }
 
     private companion object {
+        const val MAX_CLIENTS = 5
         val FtpDateFormat = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val RenameCommands = setOf("RNFR", "RNTO")
     }

@@ -4,6 +4,17 @@ All notable user-facing changes to Simple FTP are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Added client connection limits (max 5) to prevent server resource exhaustion.
+- Added 5-minute control socket timeout to prevent thread leakage on inactive sessions.
+- Added explicit protection preventing deletion of the FTP root directory.
+- Checked both read and write permissions on older Android versions (API < 30).
+
+### Changed
+- Optimized QR code generation: reduced default size to 256x256 and moved bitmap creation off the main thread.
+- Optimized folder listing in PathScreen to run asynchronously on a background I/O thread.
+- Thread-safed directory path updates with @Volatile keyword.
+
 ## [0.1.0] - 2026-06-22
 
 ### Added

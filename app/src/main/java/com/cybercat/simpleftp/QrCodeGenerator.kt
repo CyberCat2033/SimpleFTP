@@ -7,7 +7,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
 object QrCodeGenerator {
-    fun create(content: String, size: Int = 768): Bitmap {
+    fun create(content: String, size: Int = 256): Bitmap {
         val hints = mapOf(
             EncodeHintType.CHARACTER_SET to "UTF-8",
             EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
