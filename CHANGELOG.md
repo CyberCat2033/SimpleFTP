@@ -2,7 +2,7 @@
 
 All notable user-facing changes to Simple FTP are documented in this file.
 
-## [Unreleased]
+## [0.2.0] - 2026-06-24
 
 ### Added
 - Added app startup update checks through the GitHub Pages update manifest.
