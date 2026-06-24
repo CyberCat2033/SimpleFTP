@@ -25,6 +25,7 @@ data class FtpServerStatus(
 class MinimalFtpServer(
     private val port: Int,
     private val rootProvider: () -> File,
+    private val addressProvider: () -> String?,
     private val onStatus: (FtpServerStatus) -> Unit
 ) {
     private val clients = CopyOnWriteArraySet<Socket>()
@@ -42,7 +43,7 @@ class MinimalFtpServer(
             try {
                 ServerSocket(port).use { socket ->
                     serverSocket = socket
-                    val url = NetworkAddress.localIpv4Address()?.let {
+                    val url = addressProvider()?.let {
                         "ftp://anonymous@$it:$port/"
                     }
                     onStatus(FtpServerStatus(running = true, url = url))
@@ -388,7 +389,7 @@ class MinimalFtpServer(
 
         fun enterPassiveMode() {
             val passive = openPassiveSocket()
-            val host = NetworkAddress.localIpv4Address()
+            val host = addressProvider()
                 ?: socket.localAddress.hostAddress
                 ?: "127.0.0.1"
             val parts = host.split('.')

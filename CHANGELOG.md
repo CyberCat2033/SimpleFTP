@@ -12,6 +12,7 @@ All notable user-facing changes to Simple FTP are documented in this file.
 - Checked both read and write permissions on older Android versions (API < 30).
 
 ### Changed
+- Restricted FTP address detection to Wi-Fi networks and refreshed it after Wi-Fi connection changes.
 - Optimized QR code generation: reduced default size to 256x256 and moved bitmap creation off the main thread.
 - Optimized folder listing in PathScreen to run asynchronously on a background I/O thread.
 - Thread-safed directory path updates with @Volatile keyword.

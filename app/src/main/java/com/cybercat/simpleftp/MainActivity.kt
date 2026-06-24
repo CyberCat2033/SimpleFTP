@@ -3,6 +3,11 @@ package com.cybercat.simpleftp
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -81,6 +86,7 @@ class MainActivity : ComponentActivity() {
     private var currentRelativePath: String = DEFAULT_RELATIVE_PATH
     private var hasFileAccessState = mutableStateOf(false)
     private var isWifiEnabledState = mutableStateOf(false)
+    private var wifiNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +102,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         )
+        registerWifiNetworkCallback()
 
         startFtpServer()
         setContent {
@@ -116,6 +123,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        unregisterWifiNetworkCallback()
         ftpServer?.stop()
         super.onDestroy()
     }
@@ -131,6 +139,7 @@ class MainActivity : ComponentActivity() {
             rootProvider = {
                 File(storageRoot(), currentRelativePath).also { it.mkdirs() }
             },
+            addressProvider = ::localWifiAddress,
             onStatus = { serverStatus.value = it }
         ).also { it.start() }
     }
@@ -149,12 +158,56 @@ class MainActivity : ComponentActivity() {
 
     private fun storageRoot(): File = Environment.getExternalStorageDirectory()
 
-    private fun localFtpUrl(): String? = NetworkAddress.localIpv4Address()?.let {
+    private fun localFtpUrl(): String? = localWifiAddress()?.let {
         "ftp://anonymous@$it:$FTP_PORT/"
     }
 
+    private fun localWifiAddress(): String? = NetworkAddress.localWifiIpv4Address(applicationContext)
+
+    private fun connectivityManager(): ConnectivityManager? =
+        applicationContext.getSystemService(ConnectivityManager::class.java)
+
     private fun isWifiEnabled(): Boolean =
         applicationContext.getSystemService(WifiManager::class.java)?.isWifiEnabled == true
+
+    private fun registerWifiNetworkCallback() {
+        val connectivityManager = connectivityManager() ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = refreshWifiStateOnMain()
+
+            override fun onLost(network: Network) = refreshWifiStateOnMain()
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities
+            ) = refreshWifiStateOnMain()
+
+            override fun onLinkPropertiesChanged(
+                network: Network,
+                linkProperties: LinkProperties
+            ) = refreshWifiStateOnMain()
+        }
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
+        if (runCatching { connectivityManager.registerNetworkCallback(request, callback) }.isSuccess) {
+            wifiNetworkCallback = callback
+        }
+    }
+
+    private fun unregisterWifiNetworkCallback() {
+        val callback = wifiNetworkCallback ?: return
+        connectivityManager()?.let { connectivityManager ->
+            runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+        }
+        wifiNetworkCallback = null
+    }
+
+    private fun refreshWifiStateOnMain() {
+        runOnUiThread {
+            refreshWifiState()
+        }
+    }
 
     private fun openWifiSettings() {
         val intents = listOf(
