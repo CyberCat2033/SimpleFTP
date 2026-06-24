@@ -5,6 +5,7 @@ All notable user-facing changes to Simple FTP are documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added a startup Wi-Fi warning with a shortcut to Android Wi-Fi settings.
 - Added client connection limits (max 5) to prevent server resource exhaustion.
 - Added 5-minute control socket timeout to prevent thread leakage on inactive sessions.
 - Added explicit protection preventing deletion of the FTP root directory.

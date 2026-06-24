@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -70,6 +71,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val FTP_PORT = 2121
+
 class MainActivity : ComponentActivity() {
     private lateinit var pathRepository: PathRepository
     private val serverStatus = MutableStateFlow(FtpServerStatus())
@@ -77,16 +80,19 @@ class MainActivity : ComponentActivity() {
     @Volatile
     private var currentRelativePath: String = DEFAULT_RELATIVE_PATH
     private var hasFileAccessState = mutableStateOf(false)
+    private var isWifiEnabledState = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pathRepository = PathRepository(this)
         hasFileAccessState.value = hasFileAccess()
+        isWifiEnabledState.value = isWifiEnabled()
 
         lifecycle.addObserver(
             object : androidx.lifecycle.DefaultLifecycleObserver {
                 override fun onResume(owner: androidx.lifecycle.LifecycleOwner) {
                     hasFileAccessState.value = hasFileAccess()
+                    refreshWifiState()
                 }
             }
         )
@@ -97,8 +103,10 @@ class MainActivity : ComponentActivity() {
                 pathRepository = pathRepository,
                 serverStatusFlow = serverStatus,
                 hasFileAccess = hasFileAccessState.value,
+                isWifiEnabled = isWifiEnabledState.value,
                 storageRoot = storageRoot(),
                 onGrantFileAccess = ::requestFileAccess,
+                onOpenWifiSettings = ::openWifiSettings,
                 onExit = {
                     ftpServer?.stop()
                     finishAndRemoveTask()
@@ -119,7 +127,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         ftpServer = MinimalFtpServer(
-            port = 2121,
+            port = FTP_PORT,
             rootProvider = {
                 File(storageRoot(), currentRelativePath).also { it.mkdirs() }
             },
@@ -127,7 +135,37 @@ class MainActivity : ComponentActivity() {
         ).also { it.start() }
     }
 
+    private fun refreshWifiState() {
+        val enabled = isWifiEnabled()
+        isWifiEnabledState.value = enabled
+        val status = serverStatus.value
+        if (!status.running || status.error != null) return
+
+        val url = if (enabled) localFtpUrl() else null
+        if (status.url != url) {
+            serverStatus.value = status.copy(url = url)
+        }
+    }
+
     private fun storageRoot(): File = Environment.getExternalStorageDirectory()
+
+    private fun localFtpUrl(): String? = NetworkAddress.localIpv4Address()?.let {
+        "ftp://anonymous@$it:$FTP_PORT/"
+    }
+
+    private fun isWifiEnabled(): Boolean =
+        applicationContext.getSystemService(WifiManager::class.java)?.isWifiEnabled == true
+
+    private fun openWifiSettings() {
+        val intents = listOf(
+            Intent(Settings.ACTION_WIFI_SETTINGS),
+            Intent(Settings.ACTION_WIRELESS_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS)
+        )
+        for (intent in intents) {
+            if (runCatching { startActivity(intent) }.isSuccess) return
+        }
+    }
 
     private fun hasFileAccess(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         Environment.isExternalStorageManager()
@@ -170,8 +208,10 @@ private fun AppContent(
     pathRepository: PathRepository,
     serverStatusFlow: MutableStateFlow<FtpServerStatus>,
     hasFileAccess: Boolean,
+    isWifiEnabled: Boolean,
     storageRoot: File,
     onGrantFileAccess: () -> Unit,
+    onOpenWifiSettings: () -> Unit,
     onExit: () -> Unit
 ) {
     val relativePath by pathRepository.relativePath.collectAsState(
@@ -193,7 +233,9 @@ private fun AppContent(
                         status = serverStatus,
                         relativePath = relativePath,
                         hasFileAccess = hasFileAccess,
+                        isWifiEnabled = isWifiEnabled,
                         onGrantFileAccess = onGrantFileAccess,
+                        onOpenWifiSettings = onOpenWifiSettings,
                         onPath = { screen = Screen.Path },
                         onExit = onExit
                     )
@@ -222,7 +264,9 @@ private fun MainScreen(
     status: FtpServerStatus,
     relativePath: String,
     hasFileAccess: Boolean,
+    isWifiEnabled: Boolean,
     onGrantFileAccess: () -> Unit,
+    onOpenWifiSettings: () -> Unit,
     onPath: () -> Unit,
     onExit: () -> Unit
 ) {
@@ -249,7 +293,19 @@ private fun MainScreen(
             )
             Spacer(Modifier.height(16.dp))
             val url = status.url
-            if (url != null) {
+            if (!isWifiEnabled) {
+                Text(
+                    text = stringResource(R.string.wifi_disabled),
+                    fontSize = 22.sp,
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(8.dp))
+                PrimaryButton(
+                    text = stringResource(R.string.open_wifi_settings),
+                    onClick = onOpenWifiSettings
+                )
+            } else if (url != null) {
                 val bitmapState = produceState<Bitmap?>(initialValue = null, url) {
                     value = withContext(Dispatchers.Default) {
                         QrCodeGenerator.create(url)
@@ -278,6 +334,18 @@ private fun MainScreen(
                     text = stringResource(R.string.ftp_login_hint),
                     fontSize = 16.sp,
                     textAlign = TextAlign.Center
+                )
+            } else if (status.running) {
+                Text(
+                    text = stringResource(R.string.wifi_address_missing),
+                    fontSize = 22.sp,
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(8.dp))
+                PrimaryButton(
+                    text = stringResource(R.string.open_wifi_settings),
+                    onClick = onOpenWifiSettings
                 )
             } else {
                 Text(

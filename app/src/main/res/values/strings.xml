@@ -17,4 +17,7 @@
     <string name="grant_file_access">Grant file access</string>
     <string name="path_saved">Path is saved</string>
     <string name="ftp_login_hint">Anonymous FTP, no password required</string>
+    <string name="wifi_disabled">Wi-Fi is off. Turn it on and connect this device to the same local network as eBookSender.</string>
+    <string name="wifi_address_missing">Connect to a Wi-Fi network to show the FTP address.</string>
+    <string name="open_wifi_settings">Open Wi-Fi settings</string>
 </resources>
