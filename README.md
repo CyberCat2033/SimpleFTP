@@ -174,7 +174,16 @@ GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:assembleRelease \
 - собирает release APK с версией из тега;
 - переименовывает APK в `simple-ftp-vX.Y.Z.apk`;
 - публикует APK на GitHub Release Page;
-- добавляет `CHANGELOG.md` в release notes.
+- добавляет `CHANGELOG.md` в release notes;
+- публикует `updates/latest.json` и changelog-файлы на GitHub Pages для проверки обновлений в приложении.
+
+Приложение проверяет обновления только при запуске. Manifest обновлений публикуется по адресу:
+
+```text
+https://cybercat2033.github.io/SimpleFTP/updates/latest.json
+```
+
+Для работы автообновления в репозитории должна быть включена GitHub Pages публикация через GitHub Actions.
 
 Для подписанной release-сборки в GitHub Actions нужны secrets:
 
@@ -192,6 +201,7 @@ GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:assembleRelease \
 | Путь | Назначение |
 | --- | --- |
 | `app/src/main/java/com/cybercat/simpleftp/MainActivity.kt` | Android entry point и e-ink UI на Jetpack Compose |
+| `app/src/main/java/com/cybercat/simpleftp/AppUpdateManager.kt` | проверка manifest обновлений, загрузка APK и запуск системного установщика |
 | `app/src/main/java/com/cybercat/simpleftp/MinimalFtpServer.kt` | минимальная реализация FTP-сервера |
 | `app/src/main/java/com/cybercat/simpleftp/NetworkAddress.kt` | выбор локального IPv4-адреса для QR-кода |
 | `app/src/main/java/com/cybercat/simpleftp/PathRepository.kt` | хранение выбранной FTP-папки через DataStore |

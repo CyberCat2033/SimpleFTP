@@ -27,8 +27,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -46,7 +48,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,12 +66,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import android.graphics.Bitmap
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.produceState
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -80,6 +83,7 @@ private const val FTP_PORT = 2121
 
 class MainActivity : ComponentActivity() {
     private lateinit var pathRepository: PathRepository
+    private lateinit var appUpdateManager: AppUpdateManager
     private val serverStatus = MutableStateFlow(FtpServerStatus())
     private var ftpServer: MinimalFtpServer? = null
     @Volatile
@@ -91,6 +95,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pathRepository = PathRepository(this)
+        appUpdateManager = AppUpdateManager(this, lifecycleScope)
         hasFileAccessState.value = hasFileAccess()
         isWifiEnabledState.value = isWifiEnabled()
 
@@ -99,21 +104,26 @@ class MainActivity : ComponentActivity() {
                 override fun onResume(owner: androidx.lifecycle.LifecycleOwner) {
                     hasFileAccessState.value = hasFileAccess()
                     refreshWifiState()
+                    appUpdateManager.resumePendingInstall()
                 }
             }
         )
         registerWifiNetworkCallback()
 
         startFtpServer()
+        appUpdateManager.checkForUpdatesOnStartup(Locale.getDefault().language)
         setContent {
             AppContent(
                 pathRepository = pathRepository,
                 serverStatusFlow = serverStatus,
+                appUpdateStateFlow = appUpdateManager.state,
                 hasFileAccess = hasFileAccessState.value,
                 isWifiEnabled = isWifiEnabledState.value,
                 storageRoot = storageRoot(),
                 onGrantFileAccess = ::requestFileAccess,
                 onOpenWifiSettings = ::openWifiSettings,
+                onInstallUpdate = appUpdateManager::installAvailableUpdate,
+                onDismissUpdate = appUpdateManager::dismissAvailableUpdate,
                 onExit = {
                     ftpServer?.stop()
                     finishAndRemoveTask()
@@ -260,17 +270,21 @@ private enum class Screen {
 private fun AppContent(
     pathRepository: PathRepository,
     serverStatusFlow: MutableStateFlow<FtpServerStatus>,
+    appUpdateStateFlow: MutableStateFlow<AppUpdateState>,
     hasFileAccess: Boolean,
     isWifiEnabled: Boolean,
     storageRoot: File,
     onGrantFileAccess: () -> Unit,
     onOpenWifiSettings: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    onDismissUpdate: () -> Unit,
     onExit: () -> Unit
 ) {
     val relativePath by pathRepository.relativePath.collectAsState(
         initial = DEFAULT_RELATIVE_PATH
     )
     val serverStatus by serverStatusFlow.collectAsState()
+    val appUpdateState by appUpdateStateFlow.collectAsState()
     var screen by remember { mutableStateOf(Screen.Main) }
     val scope = rememberCoroutineScope()
 
@@ -284,6 +298,7 @@ private fun AppContent(
                 when (screen) {
                     Screen.Main -> MainScreen(
                         status = serverStatus,
+                        appVersion = appUpdateState.currentVersionName,
                         relativePath = relativePath,
                         hasFileAccess = hasFileAccess,
                         isWifiEnabled = isWifiEnabled,
@@ -307,6 +322,13 @@ private fun AppContent(
                         }
                     )
                 }
+                if (appUpdateState.availableUpdate != null) {
+                    AppUpdateDialog(
+                        updateState = appUpdateState,
+                        onInstallUpdate = onInstallUpdate,
+                        onDismissUpdate = onDismissUpdate
+                    )
+                }
             }
         }
     }
@@ -315,6 +337,7 @@ private fun AppContent(
 @Composable
 private fun MainScreen(
     status: FtpServerStatus,
+    appVersion: String,
     relativePath: String,
     hasFileAccess: Boolean,
     isWifiEnabled: Boolean,
@@ -415,6 +438,12 @@ private fun MainScreen(
                 fontSize = 18.sp,
                 textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.app_version, appVersion),
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center
+            )
             if (!hasFileAccess) {
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -439,6 +468,113 @@ private fun MainScreen(
             }
         }
     }
+}
+
+@Composable
+private fun AppUpdateDialog(
+    updateState: AppUpdateState,
+    onInstallUpdate: () -> Unit,
+    onDismissUpdate: () -> Unit
+) {
+    val update = updateState.availableUpdate ?: return
+    Dialog(
+        onDismissRequest = {
+            if (!updateState.isDownloading) onDismissUpdate()
+        }
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 560.dp)
+                .border(2.dp, Color.Black),
+            color = Color.White,
+            contentColor = Color.Black
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.update_available_title),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = stringResource(
+                        R.string.update_versions,
+                        updateState.currentVersionName,
+                        update.versionName
+                    ),
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = stringResource(R.string.update_changelog_title),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = update.changelog ?: stringResource(R.string.update_changelog_unavailable),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 220.dp)
+                        .verticalScroll(rememberScrollState()),
+                    fontSize = 17.sp
+                )
+                val statusText = updateState.updateStatusText()
+                if (statusText != null) {
+                    Text(
+                        text = statusText,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                ) {
+                    SecondaryButton(
+                        text = stringResource(R.string.update_later),
+                        enabled = !updateState.isDownloading,
+                        onClick = onDismissUpdate
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.update_install),
+                        enabled = !updateState.isDownloading,
+                        onClick = onInstallUpdate
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppUpdateState.updateStatusText(): String? = when (val currentStatus = status) {
+    AppUpdateStatus.Downloading -> downloadProgress?.percent?.let { percent ->
+        stringResource(R.string.update_downloading_percent, percent)
+    } ?: stringResource(R.string.update_downloading)
+
+    AppUpdateStatus.PermissionRequired -> stringResource(R.string.update_permission_required)
+    AppUpdateStatus.ReadyToInstall -> stringResource(R.string.update_ready_to_install)
+    is AppUpdateStatus.Error -> stringResource(currentStatus.reason.stringResourceId())
+    null -> null
+}
+
+private fun AppUpdateErrorReason.stringResourceId(): Int = when (this) {
+    AppUpdateErrorReason.Network -> R.string.update_error_network
+    AppUpdateErrorReason.InvalidManifest -> R.string.update_error_invalid_manifest
+    AppUpdateErrorReason.NoCompatibleArtifact -> R.string.update_error_no_compatible_artifact
+    AppUpdateErrorReason.DownloadFailed -> R.string.update_error_download_failed
+    AppUpdateErrorReason.ChecksumMismatch -> R.string.update_error_checksum_mismatch
+    AppUpdateErrorReason.SignatureMismatch -> R.string.update_error_signature_mismatch
+    AppUpdateErrorReason.InstallUnavailable -> R.string.update_error_install_unavailable
+    AppUpdateErrorReason.Unknown -> R.string.update_error_unknown
 }
 
 @Composable
@@ -557,9 +693,10 @@ private fun FolderRow(name: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PrimaryButton(text: String, onClick: () -> Unit) {
+private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(0.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Black,
@@ -576,9 +713,10 @@ private fun PrimaryButton(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SecondaryButton(text: String, onClick: () -> Unit) {
+private fun SecondaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(0.dp),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = Color.White,

@@ -37,9 +37,15 @@ android {
         targetSdk = 35
         versionCode = property("VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = property("VERSION_NAME") ?: "0.1.0"
+        buildConfigField(
+            "String",
+            "UPDATE_MANIFEST_URL",
+            "\"https://cybercat2033.github.io/SimpleFTP/updates/latest.json\""
+        )
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 

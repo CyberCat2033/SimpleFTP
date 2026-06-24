@@ -44,7 +44,7 @@ These instructions define the required working rules for Codex in this repositor
 
 - `README.md` is user-facing documentation. Keep internal Codex instructions, implementation plans, and maintainer reminders out of it.
 - Keep `README.md` honest about the minimal scope and limitations of the app.
-- Keep `CHANGELOG.md` updated for user-facing changes, release notes, packaging changes, and compatibility changes.
+- Keep `CHANGELOG.md` and `CHANGELOG.ru.md` updated for user-facing changes, release notes, packaging changes, compatibility changes, and in-app update notes.
 - At task completion, decide whether `AGENTS.md` needs updates. Update it yourself when workflow, architecture, important paths, shared patterns, or verification commands change.
 - At the same checkpoint, decide whether `CHANGELOG.md` needs updates and state the result in the final response.
 
@@ -92,8 +92,10 @@ These instructions define the required working rules for Codex in this repositor
 | Path | Responsibility |
 | --- | --- |
 | `app/src/main/java/com/cybercat/simpleftp/MainActivity.kt` | Android entry point and e-ink Compose UI |
+| `app/src/main/java/com/cybercat/simpleftp/AppUpdateManager.kt` | GitHub Pages update manifest checks, APK download/verification, and Android installer handoff |
+| `app/src/main/java/com/cybercat/simpleftp/AppUpdateModels.kt` | In-app update state and manifest/artifact models |
 | `app/src/main/java/com/cybercat/simpleftp/MinimalFtpServer.kt` | Minimal passive FTP server implementation |
 | `app/src/main/java/com/cybercat/simpleftp/NetworkAddress.kt` | Local IPv4 discovery for the FTP URL |
 | `app/src/main/java/com/cybercat/simpleftp/PathRepository.kt` | Persisted served-folder selection |
 | `app/src/main/java/com/cybercat/simpleftp/QrCodeGenerator.kt` | QR code generation |
-| `.github/workflows/ci-cd.yml` | Debug verification and tagged release publication |
+| `.github/workflows/ci-cd.yml` | Debug verification, tagged release publication, and GitHub Pages update manifest deployment |

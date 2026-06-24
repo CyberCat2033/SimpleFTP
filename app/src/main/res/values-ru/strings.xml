@@ -5,6 +5,7 @@
     <string name="server_running">Сервер запущен</string>
     <string name="server_stopped">Сервер остановлен</string>
     <string name="server_error">Ошибка сервера: %1$s</string>
+    <string name="app_version">Версия: %1$s</string>
     <string name="storage_root">Папка книг</string>
     <string name="path">Путь</string>
     <string name="exit">Выход</string>
@@ -20,4 +21,22 @@
     <string name="wifi_disabled">Wi-Fi выключен. Включите его и подключите устройство к той же локальной сети, что и eBookSender.</string>
     <string name="wifi_address_missing">Дождитесь подключения к Wi-Fi, чтобы показать FTP-адрес.</string>
     <string name="open_wifi_settings">Открыть настройки Wi-Fi</string>
+    <string name="update_available_title">Доступно обновление</string>
+    <string name="update_versions">Установлена: %1$s\nДоступна: %2$s</string>
+    <string name="update_changelog_title">Что изменилось</string>
+    <string name="update_changelog_unavailable">Список изменений недоступен.</string>
+    <string name="update_later">Позже</string>
+    <string name="update_install">Установить</string>
+    <string name="update_downloading">Загрузка обновления...</string>
+    <string name="update_downloading_percent">Загрузка обновления: %1$d%%</string>
+    <string name="update_permission_required">Разрешите установку APK для Simple FTP и вернитесь в приложение.</string>
+    <string name="update_ready_to_install">Открыт установщик Android. Подтвердите обновление в нем.</string>
+    <string name="update_error_network">Не удалось проверить или скачать обновление. Проверьте подключение к сети.</string>
+    <string name="update_error_invalid_manifest">Данные обновления некорректны.</string>
+    <string name="update_error_no_compatible_artifact">Для этого устройства не найден совместимый APK.</string>
+    <string name="update_error_download_failed">Не удалось скачать обновление.</string>
+    <string name="update_error_checksum_mismatch">Скачанный APK не прошел проверку контрольной суммы.</string>
+    <string name="update_error_signature_mismatch">Скачанный APK подписан другим сертификатом.</string>
+    <string name="update_error_install_unavailable">Не удалось открыть установщик Android.</string>
+    <string name="update_error_unknown">Не удалось выполнить обновление.</string>
 </resources>

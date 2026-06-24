@@ -129,6 +129,57 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Generate update manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version_name }}"
+          VERSION_CODE="${{ steps.version.outputs.version_code }}"
+          TAG="${GITHUB_REF_NAME}"
+          APK_NAME="${{ steps.build-apk.outputs.apk_name }}"
+          ARTIFACT_DIR="release-artifacts"
+          SITE_DIR="site/updates"
+          CHANGELOG_DIR="$SITE_DIR/changelog"
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          CHANGELOG_URL="https://cybercat2033.github.io/SimpleFTP/updates/changelog"
+          RELEASED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          if [[ ! -s CHANGELOG.md || ! -s CHANGELOG.ru.md ]]; then
+            echo "::error::CHANGELOG.md and CHANGELOG.ru.md must exist and be non-empty."
+            exit 1
+          fi
+
+          mkdir -p "$CHANGELOG_DIR"
+          cp CHANGELOG.md "$CHANGELOG_DIR/CHANGELOG.md"
+          cp CHANGELOG.ru.md "$CHANGELOG_DIR/CHANGELOG.ru.md"
+
+          cat > "$SITE_DIR/latest.json" <<EOF
+          {
+            "schemaVersion": 1,
+            "packageName": "com.cybercat.simpleftp",
+            "versionName": "$VERSION",
+            "versionCode": $VERSION_CODE,
+            "minSdk": 23,
+            "releasedAt": "$RELEASED_AT",
+            "changelogUrl": "$CHANGELOG_URL/CHANGELOG.md",
+            "changelogUrls": {
+              "en": "$CHANGELOG_URL/CHANGELOG.md",
+              "ru": "$CHANGELOG_URL/CHANGELOG.ru.md"
+            },
+            "artifacts": [
+              {
+                "abi": "universal",
+                "fileName": "$APK_NAME",
+                "url": "$RELEASE_URL/$APK_NAME",
+                "sha256": "$(sha256sum "$ARTIFACT_DIR/$APK_NAME" | cut -d ' ' -f 1)",
+                "sizeBytes": $(stat -c%s "$ARTIFACT_DIR/$APK_NAME")
+              }
+            ]
+          }
+          EOF
+
       - name: Prepare release notes
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -188,3 +239,27 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           overwrite_files: true
+
+      - name: Upload update manifest Pages artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy-pages:
+    name: Deploy Update Manifest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -5,6 +5,9 @@ All notable user-facing changes to Simple FTP are documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added app startup update checks through the GitHub Pages update manifest.
+- Added an in-app update dialog with changelog, APK download, checksum verification, signature verification, and Android installer handoff.
+- Added current app version display on the main screen.
 - Added a startup Wi-Fi warning with a shortcut to Android Wi-Fi settings.
 - Added client connection limits (max 5) to prevent server resource exhaustion.
 - Added 5-minute control socket timeout to prevent thread leakage on inactive sessions.
@@ -12,6 +15,7 @@ All notable user-facing changes to Simple FTP are documented in this file.
 - Checked both read and write permissions on older Android versions (API < 30).
 
 ### Changed
+- Extended tagged release builds to publish the in-app update manifest and localized changelogs to GitHub Pages.
 - Restricted FTP address detection to Wi-Fi networks and refreshed it after Wi-Fi connection changes.
 - Optimized QR code generation: reduced default size to 256x256 and moved bitmap creation off the main thread.
 - Optimized folder listing in PathScreen to run asynchronously on a background I/O thread.
